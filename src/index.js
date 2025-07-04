@@ -1,12 +1,75 @@
+// Importiere das prompts-Paket für Konsoleninteraktion
 const prompts = require("prompts");
 
+// Pure, immutable task list (wird durch Spread / Filter nie direkt mutiert)
 let tasks = [];
 
+/**
+ * Higher-order function zum Filtern von Tasks nach einem Predicate.
+ * Nutzt .filter (funktionale Programmierung).
+ */
+const filterTasks = (tasks, predicate) => tasks.filter(predicate);
+
+/**
+ * Rekursive Funktion zur Ausgabe der Aufgabenliste.
+ * Vermeidet for-Schleifen, um Rekursion zu üben.
+ */
+function printTasksRec(tasks, index = 0) {
+  if (index >= tasks.length) return;
+  const t = tasks[index];
+  console.log(`#${t.id}: ${t.title} | ${t.category} | bis ${t.deadline}`);
+  printTasksRec(tasks, index + 1);
+}
+
+/**
+ * Pipeline-orientierte Funktion:
+ * Wendet alle übergebenen Funktionen (HOFs) auf die Task-Liste an
+ * und gibt die gefilterten/verarbeiteten Tasks rekursiv aus.
+ */
+function processAndPrint(tasks, ...fns) {
+  const processed = fns.reduce((acc, fn) => fn(acc), tasks);
+  printTasksRec(processed);
+}
+
+/**
+ * Pure Function zum Hinzufügen einer neuen Aufgabe.
+ * Gibt eine neue Task-Liste zurück.
+ */
+function addTask(tasks, task) {
+  return [...tasks, task];
+}
+
+/**
+ * Pure Function zum Löschen einer Aufgabe anhand der ID.
+ * Gibt eine neue Task-Liste zurück ohne die gelöschte Aufgabe.
+ */
+function deleteTask(tasks, id) {
+  return tasks.filter((t) => t.id !== id);
+}
+
+/**
+ * Pattern Matching Simulation:
+ * Ruft den passenden Handler basierend auf der Aktion auf.
+ * Nutzt "_" als Fallback für ungültige Eingaben.
+ */
+function matchAction(action, handlers) {
+  if (handlers[action]) {
+    return handlers[action]();
+  } else if (handlers["_"]) {
+    return handlers["_"]();
+  }
+}
+
+/**
+ * Hauptfunktion für die Konsolen-Applikation.
+ * Stellt ein Menü zur Verfügung und bearbeitet Benutzeraktionen.
+ */
 async function main() {
   let exit = false;
 
   while (!exit) {
-    const response = await prompts({
+    // Auswahlmenü für Aktionen
+    const { action } = await prompts({
       type: "select",
       name: "action",
       message: "Was möchtest du tun?",
@@ -20,8 +83,10 @@ async function main() {
       ],
     });
 
-    switch (response.action) {
-      case "add":
+    // Pattern Matching für die gewählte Aktion
+    await matchAction(action, {
+      // Aufgabe hinzufügen
+      add: async () => {
         const newTask = await prompts([
           { type: "text", name: "title", message: "Titel:" },
           { type: "text", name: "category", message: "Kategorie:" },
@@ -38,75 +103,61 @@ async function main() {
           category: newTask.category,
           deadline: newTask.deadline.toISOString().split("T")[0],
         });
-        break;
+      },
 
-      case "list":
-        printTasks(tasks);
-        break;
+      // Alle Aufgaben anzeigen
+      list: () => {
+        processAndPrint(tasks);
+      },
 
-      case "filterCat":
-        const catInput = await prompts({
+      // Aufgaben nach Kategorie filtern und anzeigen
+      filterCat: async () => {
+        const { cat } = await prompts({
           type: "text",
           name: "cat",
           message: "Kategorie:",
         });
-        printTasks(filterByCategory(tasks, catInput.cat));
-        break;
+        processAndPrint(tasks, (ts) =>
+          filterTasks(ts, (t) => t.category.toLowerCase() === cat.toLowerCase())
+        );
+      },
 
-      case "filterDate":
-        const dateInput = await prompts({
+      // Aufgaben nach Deadline filtern und anzeigen
+      filterDate: async () => {
+        const { date } = await prompts({
           type: "date",
           name: "date",
           message: "Datum:",
         });
-        const formatted = dateInput.date.toISOString().split("T")[0];
-        printTasks(filterByDeadline(tasks, formatted));
-        break;
+        const formatted = date.toISOString().split("T")[0];
+        processAndPrint(tasks, (ts) =>
+          filterTasks(ts, (t) => t.deadline === formatted)
+        );
+      },
 
-      case "delete":
-        const delInput = await prompts({
+      // Aufgabe löschen anhand der ID
+      delete: async () => {
+        const { id } = await prompts({
           type: "number",
           name: "id",
           message: "ID der Aufgabe:",
         });
-        tasks = deleteTask(tasks, delInput.id);
-        break;
+        tasks = deleteTask(tasks, id);
+      },
 
-      case "exit":
+      // Programm beenden
+      exit: () => {
         exit = true;
         console.log("Tschüss!");
-        break;
-    }
+      },
+
+      // Fallback für ungültige Auswahl
+      _: () => {
+        console.log("Ungültige Auswahl.");
+      },
+    });
   }
 }
 
-function addTask(tasks, task) {
-  return [...tasks, task];
-}
-
-function deleteTask(tasks, id) {
-  return tasks.filter((t) => t.id !== id);
-}
-
-function filterByCategory(tasks, category) {
-  return tasks.filter(
-    (t) => t.category.toLowerCase() === category.toLowerCase()
-  );
-}
-
-function filterByDeadline(tasks, deadline) {
-  return tasks.filter((t) => t.deadline === deadline);
-}
-
-function printTasks(tasks) {
-  if (tasks.length === 0) {
-    console.log("Keine Aufgaben gefunden.");
-    return;
-  }
-
-  tasks.forEach((t) => {
-    console.log(`#${t.id}: ${t.title} | ${t.category} | bis ${t.deadline}`);
-  });
-}
-
+// Starte die Applikation
 main();
